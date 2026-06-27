@@ -138,11 +138,11 @@ func main() {
 			}
 		}
 
-		for home, homeTeam := range match.Teams {
-			awayTeam := match.Teams[(home+1)%2]
+		for homeIndex, homeTeam := range match.Teams {
+			awayTeam := match.Teams[(homeIndex+1)%2]
 
 			logit := latents[homeTeam].Offense - latents[awayTeam].Defense
-			gradient := float64(match.Scores[home]) - math.Exp(logit)
+			gradient := float64(match.Scores[homeIndex]) - math.Exp(logit)
 
 			step := gradient * LEARNING_RATE
 			latents[homeTeam].Offense += step
@@ -173,17 +173,18 @@ func main() {
 	fmt.Printf("%.3f log loss\n", logLoss/float64(numTestMatches))
 
 	// print hypothetical match prediction
-	hypo := os.Args[1:]
-	if len(hypo) == 0 {
+	hypoTeams := os.Args[1:]
+	if len(hypoTeams) == 0 {
 		return
 	}
 
 	fmt.Println("\nHYPOTHETICAL MATCH:")
-	hypoPrediction := lynn.Softmax(model.Feed(makeXs(latents, hypo)))
+
+	hypoPrediction := lynn.Softmax(model.Feed(makeXs(latents, hypoTeams)))
 	fmt.Printf(
 		"%s\t%.0f%%\n%s\t%.0f%%\nDraw\t%.0f%%\n",
-		hypo[0], 100*hypoPrediction[0],
-		hypo[1], 100*hypoPrediction[2],
+		hypoTeams[0], 100*hypoPrediction[0],
+		hypoTeams[1], 100*hypoPrediction[2],
 		100*hypoPrediction[1],
 	)
 }
