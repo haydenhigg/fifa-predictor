@@ -36,9 +36,9 @@ def get_rows(driver: webdriver.Chrome) -> list:
         rows.append((
             date.text,
             status.text,
-            teams[0].text,
+            teams[0].text.strip().replace(' ', '_').replace("'", '_'),
             scores[0].text.strip('()'),
-            teams[1].text,
+            teams[1].text.strip().replace(' ', '_').replace("'", '_'),
             scores[1].text.strip('()')
         ))
 

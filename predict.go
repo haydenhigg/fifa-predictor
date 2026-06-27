@@ -173,12 +173,15 @@ func main() {
 	fmt.Printf("%.3f log loss\n", logLoss/float64(numTestMatches))
 
 	// print hypothetical match prediction
-	fmt.Println("\nHYPOTHETICAL MATCH:")
-	hypo := []string{"Colombia", "Portugal"}
-	hypoPrediction := lynn.Softmax(model.Feed(makeXs(latents, hypo)))
+	hypo := os.Args[1:]
+	if len(hypo) == 0 {
+		return
+	}
 
+	fmt.Println("\nHYPOTHETICAL MATCH:")
+	hypoPrediction := lynn.Softmax(model.Feed(makeXs(latents, hypo)))
 	fmt.Printf(
-		"%s\t%.0f%%\n%s\t%.0f%%\nDraw\t\t%.0f%%\n",
+		"%s\t%.0f%%\n%s\t%.0f%%\nDraw\t%.0f%%\n",
 		hypo[0], 100*hypoPrediction[0],
 		hypo[1], 100*hypoPrediction[2],
 		100*hypoPrediction[1],
