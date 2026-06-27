@@ -13,7 +13,7 @@ import (
 
 const INPUT_PATH = "fifa_matches.csv"
 
-const LEARNING_RATE = 0.1
+const LEARNING_RATE = 0.2
 const TEST_FRACTION = 0.05
 
 type Match struct {
@@ -103,6 +103,17 @@ func argmax(xs []float64) int {
 	return arg
 }
 
+func loss(ps, target []float64) float64 {
+	epsilon := 1e-15
+	loss := 0.
+	for i, p := range ps {
+		p = math.Min(math.Max(p, epsilon), 1-epsilon)
+		loss -= target[i] * math.Log(p)
+	}
+
+	return loss
+}
+
 func main() {
 	matches, err := readMatches(INPUT_PATH)
 	if err != nil {
@@ -114,6 +125,8 @@ func main() {
 
 	numTestMatches := int(float64(len(matches)) * TEST_FRACTION)
 	numCorrect := 0
+
+	logLoss := 0.
 
 	for i := len(matches) - 1; i >= 0; i-- {
 		match := matches[i]
@@ -150,12 +163,14 @@ func main() {
 			if argmax(prediction) == argmax(match.Outcome) {
 				numCorrect++
 			}
+
+			logLoss += loss(prediction, match.Outcome)
 		}
 	}
 
 	// print model metrics
 	fmt.Printf("\n%.1f%% correct\n", 100*float64(numCorrect)/float64(numTestMatches))
-	fmt.Printf("%.3f log loss\n", 0.)
+	fmt.Printf("%.3f log loss\n", logLoss/float64(numTestMatches))
 
 	// print hypothetical match prediction
 	fmt.Println("\nHYPOTHETICAL MATCH:")
