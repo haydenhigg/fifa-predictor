@@ -7,14 +7,17 @@ import (
 	"io"
 	"math"
 	"os"
+	"slices"
 	"strconv"
 	"time"
 )
 
 const INPUT_PATH = "fifa_matches.csv"
 
-const LEARNING_RATE = 0.2
+const LATENT_LEARNING_RATE = 0.22
+const MODEL_LEARNING_RATE = 0.1
 const TEST_FRACTION = 0.05
+const KELLY_MULTIPLIER = 0.2
 
 type Match struct {
 	Date    time.Time
@@ -91,6 +94,12 @@ func errors(ps, target []float64) []float64 {
 	return errors
 }
 
+func flip[T any](xs []T) []T {
+	flipped := slices.Clone(xs)
+	slices.Reverse(flipped)
+	return flipped
+}
+
 func argmax(xs []float64) int {
 	arg := 0
 
@@ -144,19 +153,22 @@ func main() {
 			logit := latents[homeTeam].Offense - latents[awayTeam].Defense
 			gradient := float64(match.Scores[homeIndex]) - math.Exp(logit)
 
-			step := gradient * LEARNING_RATE
+			step := gradient * LATENT_LEARNING_RATE
 			latents[homeTeam].Offense += step
 			latents[awayTeam].Defense -= step
 		}
 
 		// update model
 		xs := makeXs(latents, match.Teams)
-
 		prediction := lynn.Softmax(model.Feed(xs))
 		gradient := errors(prediction, match.Outcome)
-		model.Step(xs, gradient, LEARNING_RATE)
 
-		fmt.Println(match.Outcome, prediction)
+		flipXs := makeXs(latents, flip(match.Teams))
+		flipPrediction := lynn.Softmax(model.Feed(flipXs))
+		flipGradient := errors(flipPrediction, flip(match.Outcome))
+
+		model.Step(xs, gradient, MODEL_LEARNING_RATE)
+		model.Step(flipXs, flipGradient, MODEL_LEARNING_RATE)
 
 		// record model metrics
 		if i < numTestMatches {
@@ -169,7 +181,7 @@ func main() {
 	}
 
 	// print model metrics
-	fmt.Printf("\n%.1f%% correct\n", 100*float64(numCorrect)/float64(numTestMatches))
+	fmt.Printf("%.1f%% correct\n", 100*float64(numCorrect)/float64(numTestMatches))
 	fmt.Printf("%.3f log loss\n", logLoss/float64(numTestMatches))
 
 	// print hypothetical match prediction
@@ -182,9 +194,28 @@ func main() {
 
 	hypoPrediction := lynn.Softmax(model.Feed(makeXs(latents, hypoTeams)))
 	fmt.Printf(
-		"%s\t%.0f%%\n%s\t%.0f%%\nDraw\t%.0f%%\n",
+		"0) %s\t%.1f%%\n2) %s\t%.1f%%\n1) draw\t%.1f%%\n\n",
 		hypoTeams[0], 100*hypoPrediction[0],
 		hypoTeams[1], 100*hypoPrediction[2],
 		100*hypoPrediction[1],
 	)
+
+	outcome := -1
+	for outcome != 0 && outcome != 1 && outcome != 2 {
+		fmt.Print("WHICH OUTCOME ARE YOU BETTING? [0/2/1] ")
+		fmt.Scanf("%d", &outcome)
+	}
+
+	cost := -1.
+	for cost < 0 || cost > 1 {
+		fmt.Print("AT WHAT COST? ")
+		fmt.Scanf("%f", &cost)
+	}
+
+	f := 100 * KELLY_MULTIPLIER * (hypoPrediction[outcome] - cost) / (1 - cost)
+	if f <= 0 {
+		fmt.Println("\ndon't bet")
+	} else {
+		fmt.Printf("\nbet %.1f%%\n", f)
+	}
 }
