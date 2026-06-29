@@ -15,9 +15,9 @@ import (
 const INPUT_PATH = "fifa_matches.csv"
 
 const LATENT_LEARNING_RATE = 0.22
-const MODEL_LEARNING_RATE = 0.03
-const TEST_FRACTION = 0.05
-const KELLY_MULTIPLIER = 0.2
+const MODEL_LEARNING_RATE = 0.02
+const TEST_FRACTION = 0.10
+const KELLY_MULTIPLIER = 0.25
 
 type Match struct {
 	Date       time.Time
@@ -83,7 +83,16 @@ func makeXs(latents map[string]*Latent, teams []string) []float64 {
 		xs[2*i+1] = latents[team].Defense
 	}
 
-	return append(xs, xs[0]-xs[3], xs[2]-xs[1], (xs[0]-xs[3])-(xs[2]-xs[1]))
+	diff0 := latents[teams[0]].Offense - latents[teams[1]].Defense
+	diff1 := latents[teams[1]].Offense - latents[teams[0]].Defense
+
+	return append(
+		xs,
+		diff0,
+		diff1,
+		diff0-diff1,
+		math.Exp(diff0)-math.Exp(diff1),
+	)
 }
 
 func errors(ps, target []float64) []float64 {
@@ -132,7 +141,7 @@ func main() {
 	}
 
 	latents := map[string]*Latent{}
-	model := lynn.NewLinearGroup(3, 7)
+	model := lynn.NewLinearGroup(3, 8)
 
 	numTestMatches := int(float64(len(matches)) * TEST_FRACTION)
 	numCorrect := 0
@@ -183,8 +192,10 @@ func main() {
 	}
 
 	// print model metrics
+	logLoss /= float64(numTestMatches)
+
 	fmt.Printf("%.1f%% correct\n", 100*float64(numCorrect)/float64(numTestMatches))
-	fmt.Printf("%.3f log loss\n", logLoss/float64(numTestMatches))
+	fmt.Printf("%.3f log loss\n", logLoss)
 
 	// print hypothetical match prediction
 	hypoTeams := os.Args[1:]
@@ -214,7 +225,7 @@ func main() {
 		fmt.Scanf("%f", &cost)
 	}
 
-	f := 100 * KELLY_MULTIPLIER * (hypoPrediction[outcome] - cost) / (1 - cost)
+	f := 100 * KELLY_MULTIPLIER * (1 - logLoss/math.Log(3)) * (hypoPrediction[outcome] - cost) / (1 - cost)
 	if f <= 0 {
 		fmt.Println("\ndon't bet")
 	} else {
