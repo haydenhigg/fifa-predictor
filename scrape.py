@@ -31,15 +31,18 @@ def get_rows(driver: webdriver.Chrome) -> list:
         match_element = element.find_elements(By.CSS_SELECTOR, 'td:nth-child(2)')[-1]
         status = match_element.find_elements(By.CSS_SELECTOR, 'div.match-cell-status span')[-1]
         teams = match_element.find_elements(By.CSS_SELECTOR, 'div.match-cell-teams span')
-        scores = match_element.find_elements(By.CSS_SELECTOR, 'div.match-cell-scores span')
+        scores = match_element.find_elements(By.CSS_SELECTOR, 'div.match-cell-scores div.scoring.default span')
+
+        tournament = element.find_elements(By.CSS_SELECTOR, 'td:nth-child(3)')[-1]
 
         rows.append((
-            date.text,
-            status.text,
+            date.text.strip(),
+            status.text.strip(),
             teams[0].text.strip().replace(' ', '_').replace("'", '_'),
             scores[0].text.strip('()'),
             teams[1].text.strip().replace(' ', '_').replace("'", '_'),
-            scores[1].text.strip('()')
+            scores[1].text.strip('()'),
+            tournament.text.strip(),
         ))
 
     return rows

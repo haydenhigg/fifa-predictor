@@ -15,16 +15,17 @@ import (
 const INPUT_PATH = "fifa_matches.csv"
 
 const LATENT_LEARNING_RATE = 0.22
-const MODEL_LEARNING_RATE = 0.1
+const MODEL_LEARNING_RATE = 0.03
 const TEST_FRACTION = 0.05
 const KELLY_MULTIPLIER = 0.2
 
 type Match struct {
-	Date    time.Time
-	Status  string
-	Teams   []string
-	Scores  []int
-	Outcome []float64
+	Date       time.Time
+	Status     string
+	Tournament string
+	Teams      []string
+	Scores     []int
+	Outcome    []float64
 }
 
 func readMatches(fileName string) ([]Match, error) {
@@ -58,11 +59,12 @@ func readMatches(fileName string) ([]Match, error) {
 		}
 
 		matches = append(matches, Match{
-			Date:    date,
-			Status:  record[1],
-			Teams:   []string{record[2], record[4]},
-			Scores:  []int{homeScore, awayScore},
-			Outcome: outcome,
+			Date:       date,
+			Status:     record[1],
+			Tournament: record[6],
+			Teams:      []string{record[2], record[4]},
+			Scores:     []int{homeScore, awayScore},
+			Outcome:    outcome,
 		})
 	}
 
@@ -81,7 +83,7 @@ func makeXs(latents map[string]*Latent, teams []string) []float64 {
 		xs[2*i+1] = latents[team].Defense
 	}
 
-	return xs
+	return append(xs, xs[0]-xs[3], xs[2]-xs[1], (xs[0]-xs[3])-(xs[2]-xs[1]))
 }
 
 func errors(ps, target []float64) []float64 {
@@ -130,7 +132,7 @@ func main() {
 	}
 
 	latents := map[string]*Latent{}
-	model := lynn.NewLinearGroup(3, 4)
+	model := lynn.NewLinearGroup(3, 7)
 
 	numTestMatches := int(float64(len(matches)) * TEST_FRACTION)
 	numCorrect := 0
