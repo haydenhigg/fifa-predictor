@@ -35,6 +35,10 @@ def get_rows(driver: webdriver.Chrome) -> list:
 
         tournament = element.find_elements(By.CSS_SELECTOR, 'td:nth-child(3)')[-1]
 
+        stage = element.find_elements(By.CSS_SELECTOR, 'td:nth-child(4)')[-1]
+
+        stadium = element.find_elements(By.CSS_SELECTOR, 'td:nth-child(5)')[-1]
+
         rows.append((
             date.text.strip(),
             status.text.strip(),
@@ -43,6 +47,8 @@ def get_rows(driver: webdriver.Chrome) -> list:
             teams[1].text.strip().replace(' ', '_').replace("'", '_'),
             scores[1].text.strip('()'),
             tournament.text.strip(),
+            stage.text.strip(),
+            stadium.text.strip(),
         ))
 
     return rows
@@ -52,7 +58,7 @@ def click_show_more(driver: webdriver.Chrome):
     button = WebDriverWait(driver, 5).until(to_be_button)
 
     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
-    sleep(2)
+    sleep(3)
 
     button.click()
 

@@ -14,9 +14,12 @@ import (
 
 const INPUT_PATH = "fifa_matches.csv"
 
-const LATENT_LEARNING_RATE = 0.22
-const MODEL_LEARNING_RATE = 0.02
-const TEST_FRACTION = 0.10
+const LATENT_STRENGTH_LEARNING_RATE = 0.24
+const LATENT_OPENNESS_LEARNING_RATE = 0.12
+const LATENT_POINTS_LEARNING_RATE = 0.12
+
+const MODEL_LEARNING_RATE = 0.01
+const TEST_FRACTION = 0.1
 const KELLY_MULTIPLIER = 0.25
 
 type Match struct {
@@ -72,27 +75,18 @@ func readMatches(fileName string) ([]Match, error) {
 }
 
 type Latent struct {
-	Offense, Defense float64
+	Strength, Offense, Defense, Openness float64
 }
 
 func makeXs(latents map[string]*Latent, teams []string) []float64 {
-	xs := make([]float64, 2*len(teams))
-
-	for i, team := range teams {
-		xs[2*i] = latents[team].Offense
-		xs[2*i+1] = latents[team].Defense
+	return []float64{
+		(latents[teams[0]].Offense - latents[teams[1]].Defense) - (latents[teams[1]].Offense - latents[teams[0]].Defense),
+		math.Exp(latents[teams[0]].Offense - latents[teams[1]].Defense) - math.Exp(latents[teams[1]].Offense - latents[teams[0]].Defense),
+		latents[teams[0]].Strength - latents[teams[1]].Strength,
+		latents[teams[1]].Strength - latents[teams[0]].Strength,
+		latents[teams[0]].Openness + latents[teams[1]].Openness,
 	}
-
-	diff0 := latents[teams[0]].Offense - latents[teams[1]].Defense
-	diff1 := latents[teams[1]].Offense - latents[teams[0]].Defense
-
-	return append(
-		xs,
-		diff0,
-		diff1,
-		diff0-diff1,
-		math.Exp(diff0)-math.Exp(diff1),
-	)
+	// return poissonOutcomeProbs(math.Exp(latents[teams[0]].Offense - latents[teams[1]].Defense), math.Exp(latents[teams[1]].Offense - latents[teams[0]].Defense))
 }
 
 func errors(ps, target []float64) []float64 {
@@ -134,39 +128,72 @@ func loss(ps, target []float64) float64 {
 	return loss
 }
 
+func sigmoid(z float64) float64 {
+	return 1 / (1 + math.Exp(-z))
+}
+
+func logFactorial(k int) float64 {
+	lg, _ := math.Lgamma(float64(k + 1))
+	return lg
+}
+
+func poissonPMF(k int, lambda float64) float64 {
+	if lambda <= 0 {
+		return 0
+	}
+
+	return math.Exp(float64(k)*math.Log(lambda) - lambda - logFactorial(k))
+}
+
+func poissonOutcomeProbs(lambda0, lambda1 float64) []float64 {
+	probs := []float64{0, 0, 0}
+
+	for g0 := 0; g0 <= 12; g0++ {
+		p0 := poissonPMF(g0, lambda0)
+
+		for g1 := 0; g1 <= 12; g1++ {
+			p := p0 * poissonPMF(g1, lambda1)
+
+			if g0 > g1 {
+				probs[0] += p
+			} else if g0 == g1 {
+				probs[1] += p
+			} else {
+				probs[2] += p
+			}
+		}
+	}
+
+	sum := probs[0] + probs[1] + probs[2]
+	for i := range probs {
+		probs[i] /= sum
+	}
+
+	return probs
+}
+
 func main() {
 	matches, err := readMatches(INPUT_PATH)
 	if err != nil {
 		panic(err)
 	}
 
-	latents := map[string]*Latent{}
-	model := lynn.NewLinearGroup(3, 8)
+	model := lynn.NewLinearGroup(3, 5)
 
 	numTestMatches := int(float64(len(matches)) * TEST_FRACTION)
-	numCorrect := 0
 
+	latents := map[string]*Latent{}
+
+	numCorrect := 0
 	logLoss := 0.
 
 	for i := len(matches) - 1; i >= 0; i-- {
 		match := matches[i]
 
-		// update latents
 		for _, team := range match.Teams {
 			if _, ok := latents[team]; !ok {
 				latents[team] = new(Latent)
 			}
-		}
-
-		for homeIndex, homeTeam := range match.Teams {
-			awayTeam := match.Teams[(homeIndex+1)%2]
-
-			logit := latents[homeTeam].Offense - latents[awayTeam].Defense
-			gradient := float64(match.Scores[homeIndex]) - math.Exp(logit)
-
-			step := gradient * LATENT_LEARNING_RATE
-			latents[homeTeam].Offense += step
-			latents[awayTeam].Defense -= step
 		}
 
 		// update model
@@ -181,6 +208,11 @@ func main() {
 		model.Step(xs, gradient, MODEL_LEARNING_RATE)
 		model.Step(flipXs, flipGradient, MODEL_LEARNING_RATE)
 
+		// prediction := poissonOutcomeProbs(
+		// 	math.Exp(latents[match.Teams[0]].Offense-latents[match.Teams[1]].Defense),
+		// 	math.Exp(latents[match.Teams[1]].Offense-latents[match.Teams[0]].Defense),
+		// )
+
 		// record model metrics
 		if i < numTestMatches {
 			if argmax(prediction) == argmax(match.Outcome) {
@@ -188,6 +220,33 @@ func main() {
 			}
 
 			logLoss += loss(prediction, match.Outcome)
+		}
+
+		// update latents
+		logisticLogit := latents[match.Teams[0]].Strength - latents[match.Teams[1]].Strength
+		logisticGradient := (1 - float64(argmax(match.Outcome))/2) - sigmoid(logisticLogit)
+		logisticStep := logisticGradient * LATENT_STRENGTH_LEARNING_RATE * math.Sqrt(1+math.Abs(float64(match.Scores[0]-match.Scores[1])))
+
+		latents[match.Teams[0]].Strength += logisticStep
+		latents[match.Teams[1]].Strength -= logisticStep
+
+		opennessLogit := latents[match.Teams[0]].Openness + latents[match.Teams[1]].Openness
+		opennessGradient := float64(match.Scores[0] + match.Scores[1]) - opennessLogit
+		opennessStep := opennessGradient * LATENT_OPENNESS_LEARNING_RATE
+
+		latents[match.Teams[0]].Openness += opennessStep
+		latents[match.Teams[1]].Openness += opennessStep
+
+		for homeIndex, homeTeam := range match.Teams {
+			awayTeam := match.Teams[(homeIndex+1)%2]
+
+			poissonLogit := latents[homeTeam].Offense - latents[awayTeam].Defense// + latents[homeTeam].Openness + latents[awayTeam].Openness
+			poissonGradient := float64(match.Scores[homeIndex]) - math.Exp(poissonLogit)
+			poissonStep := poissonGradient * LATENT_POINTS_LEARNING_RATE
+
+			latents[homeTeam].Offense += poissonStep
+			latents[awayTeam].Defense -= poissonStep
+			// latents[homeTeam].Openness += poissonStep * 0.01
 		}
 	}
 
@@ -205,6 +264,7 @@ func main() {
 
 	fmt.Println("\nHYPOTHETICAL MATCH:")
 
+	// hypoPrediction := poissonOutcomeProbs(math.Exp(latents[hypoTeams[0]].Offense-latents[hypoTeams[1]].Defense), math.Exp(latents[hypoTeams[1]].Offense-latents[hypoTeams[0]].Defense))
 	hypoPrediction := lynn.Softmax(model.Feed(makeXs(latents, hypoTeams)))
 	fmt.Printf(
 		"0) %s\t%.1f%%\n2) %s\t%.1f%%\n1) draw\t%.1f%%\n\n",
