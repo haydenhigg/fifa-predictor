@@ -1,18 +1,20 @@
 from pathlib import Path
 from typing import Any
 import csv
-from monte_carlo import MonteCarlo
+from monte_carlo import MonteCarlo, Function
+from random import gauss
 import numpy as np
 from scipy.stats import nbinom, poisson
-# from sklearn.neural_net import MLPClassifier
+# from sklearn.neural_network import MLPClassifier
 import math
 from sys import argv
 
 INPUT_PATH = Path('ha_fifa_matches.csv')
 
-TEST_FRACTION = 0.2
-
-LATENT_LR = 0.07
+TEST_FRACTION = 0.1
+STR_LATENT_LR = 0.08
+HOME_LATENT_LR = 0.06
+CORR_LATENT_LR = 0.12
 
 def read_matches() -> list[dict[str, Any]]:
     matches = []
@@ -25,17 +27,15 @@ def read_matches() -> list[dict[str, Any]]:
                 'teams': [row[2], row[5]],
                 'goals': [int(row[3]), int(row[6])],
                 'homes': [int(row[4]), int(row[7])]
-                # 'tournament': row[8],
-                # 'tournament_stage': row[9],
-                # 'stadium': row[10],
             })
 
     return matches
 
 def model(a_latent: dict, b_latent: dict, a_home: int, b_home: int) -> float:
-    b_diff = b_latent['offense'] - a_latent['defense']
+    a_logit = a_latent['offense'] - b_latent['defense'] + a_latent['home'] * a_home
+    b_logit = b_latent['offense'] - a_latent['defense'] + b_latent['home'] * b_home
 
-    return math.exp(a_latent['offense'] - b_latent['defense'] + a_latent['home'] * a_home + a_latent['correlation'] * b_diff)
+    return math.exp(a_logit + a_latent['correlation'] * b_logit)
 
 def encode_outcome(a: int, b: int) -> list[float]:
     outcome = [0] * 3
@@ -59,10 +59,10 @@ def compute_loss(ps: list[float], target: list[float]) -> float:
 def predict_outcome_poisson(lam0: float, lam1: float) -> list[float]:
     outcome = [0] * 3
 
-    for g0 in range(12):
+    for g0 in range(20):
         p0 = poisson.pmf(g0, lam0)
 
-        for g1 in range(12):
+        for g1 in range(20):
             p = p0 * poisson.pmf(g1, lam1)
 
             if g0 > g1:
@@ -86,6 +86,9 @@ if __name__ == '__main__':
     log_loss = 0
     mse = 0
 
+    # xs_train, xs_test = [], []
+    # ys_train, ys_test = [], []
+
     for i, match in enumerate(matches[::-1]):
         # ensure teams have latents
         for team in match['teams']:
@@ -94,7 +97,7 @@ if __name__ == '__main__':
                     'offense': 0,
                     'defense': 0,
                     'correlation': 0,
-                    'home': 0
+                    'home': 0,
                 }
 
         # calculate expected goals from latents
@@ -106,12 +109,31 @@ if __name__ == '__main__':
             expected_goals.append(model(latents[a], latents[b], match['homes'][j], match['homes'][(j + 1) % 2]))
 
         # make prediction and record
+        # a_latent = latents[match['teams'][0]]
+        # b_latent = latents[match['teams'][1]]
+        # x = predict_outcome_poisson(*expected_goals) + [
+        #     a_latent['offense'],
+        #     a_latent['defense'],
+        #     a_latent['correlation'],
+        #     a_latent['home'],
+        #     b_latent['offense'],
+        #     b_latent['defense'],
+        #     b_latent['correlation'],
+        #     b_latent['home'],
+        # ]
+        y = encode_outcome(*match['goals'])
+
         if i >= num_matches - num_test_matches:
             prediction = predict_outcome_poisson(*expected_goals)
-            outcome = encode_outcome(*match['goals'])
 
-            log_loss += compute_loss(prediction, outcome)
+            log_loss += compute_loss(prediction, y)
             mse += ((expected_goals[0] - expected_goals[1]) - (match['goals'][0] - match['goals'][1])) ** 2
+
+        #     xs_test.append(x)
+        #     ys_test.append(y)
+        # else:
+        #     xs_train.append(x)
+        #     ys_train.append(y)
 
         # update latents
         for j in range(len(match['teams'])):
@@ -120,11 +142,18 @@ if __name__ == '__main__':
 
             gradient = match['goals'][j] - expected_goals[j]
 
-            latents[a]['offense'] += gradient * LATENT_LR
-            latents[b]['defense'] -= gradient * LATENT_LR
+            latents[a]['correlation'] += gradient * (latents[b]['offense'] - latents[a]['defense'] + latents[b]['home'] * match['homes'][(j + 1) % 2]) * CORR_LATENT_LR
 
-            latents[a]['correlation'] += gradient * (latents[b]['offense'] - latents[a]['defense']) * LATENT_LR
-            latents[a]['home'] += gradient * match['homes'][j] * LATENT_LR
+        for j in range(len(match['teams'])):
+            a = match['teams'][j]
+            b = match['teams'][(j + 1) % 2]
+
+            gradient = match['goals'][j] - expected_goals[j]
+
+            latents[a]['offense'] += gradient * STR_LATENT_LR
+            latents[b]['defense'] -= gradient * STR_LATENT_LR
+
+            latents[a]['home'] += gradient * match['homes'][j] * HOME_LATENT_LR
 
     log_loss /= num_test_matches
     mse /= num_test_matches
@@ -132,10 +161,23 @@ if __name__ == '__main__':
     print(f'Outcome: {log_loss:.3f} log loss')
     print(f'Goal difference: {math.sqrt(mse):.3f} RMSE')
 
+    # nn = MLPClassifier(hidden_layer_sizes=[80], max_iter=300)
+    # nn.fit(xs_train, ys_train)
+
+    # log_loss = 0
+
+    # for i, x in enumerate(xs_test):
+    #     prediction = nn.predict_proba([x])
+    #     log_loss += compute_loss(prediction[0], ys_test[i])
+
+    # log_loss /= num_test_matches
+
+    # print(f'Neural network outcome: {log_loss:.3f} log loss')
+
     if len(argv) == 1:
         exit(0)
 
     a, b = argv[1], argv[2]
-    expected_goals = [model(latents[a], latents[b]), model(latents[b], latents[a])]
+    expected_goals = [model(latents[a], latents[b], 0, 0), model(latents[b], latents[a], 0, 0)]
 
     print(predict_outcome_poisson(*expected_goals))
