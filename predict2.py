@@ -11,10 +11,10 @@ from sys import argv
 
 INPUT_PATH = Path('ha_fifa_matches.csv')
 
-TEST_FRACTION = 0.1
-STR_LATENT_LR = 0.08
-HOME_LATENT_LR = 0.06
-CORR_LATENT_LR = 0.12
+TEST_FRACTION = 0.05 # 0.083
+STR_LATENT_LR = 0.11
+HOME_LATENT_LR = 0.0
+CORR_LATENT_LR = 0.15
 
 def read_matches() -> list[dict[str, Any]]:
     matches = []
