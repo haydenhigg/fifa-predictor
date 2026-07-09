@@ -9,7 +9,7 @@ def compute_loss(ps: list[float], target: list[float]) -> float:
 
     return loss
 
-with open('data.tsv') as f:
+with open('data_slv_7d.tsv') as f:
     data = [row.split('\t') for row in f.read().strip().split('\n')[1:]]
 
 losses = []
@@ -17,7 +17,6 @@ for i, row in enumerate(data):
     loss = compute_loss(row[2:5], row[5:])
     losses.append(loss)
 
-    if loss > 1.5:
-        print(i + 1, row, loss)
-
 print(f'Outcome: {mean(losses):.3f} log loss')
+
+# 0.817 log loss is the number to beat!
