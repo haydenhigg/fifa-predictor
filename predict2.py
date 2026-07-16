@@ -11,10 +11,10 @@ from sys import argv
 
 INPUT_PATH = Path('ha_fifa_matches.csv')
 
-TEST_FRACTION = 0.05 # 0.083
-STR_LATENT_LR = 0.11
+TEST_FRACTION = 0.082
+STR_LATENT_LR = 0.09
 HOME_LATENT_LR = 0.0
-CORR_LATENT_LR = 0.15
+CORR_LATENT_LR = 0.16
 
 def read_matches() -> list[dict[str, Any]]:
     matches = []
@@ -125,9 +125,24 @@ if __name__ == '__main__':
 
         if i >= num_matches - num_test_matches:
             prediction = predict_outcome_poisson(*expected_goals)
+            min_i, max_i = 0, 0
+            for i, p in enumerate(prediction):
+                if p > prediction[max_i]:
+                    max_i = i
+                elif p < prediction[min_i]:
+                    min_i = i
+            prediction[max_i] *= 1.4
+            prediction[min_i] *= 0.6
+            prediction[1] *= 1.4
+
+            prediction = [p / sum(prediction) for p in prediction]
 
             log_loss += compute_loss(prediction, y)
             mse += ((expected_goals[0] - expected_goals[1]) - (match['goals'][0] - match['goals'][1])) ** 2
+
+            # calculate residual
+            r = -math.log(prediction[y.index(max(y))])
+            print(model(latents[a], latents[b], match['homes'][j], match['homes'][(j + 1) % 2]), r)
 
         #     xs_test.append(x)
         #     ys_test.append(y)
@@ -158,7 +173,7 @@ if __name__ == '__main__':
     log_loss /= num_test_matches
     mse /= num_test_matches
 
-    print(f'Outcome: {log_loss:.3f} log loss')
+    print(f'Outcome: {log_loss:.4f} log loss')
     print(f'Goal difference: {math.sqrt(mse):.3f} RMSE')
 
     # nn = MLPClassifier(hidden_layer_sizes=[80], max_iter=300)
@@ -180,4 +195,15 @@ if __name__ == '__main__':
     a, b = argv[1], argv[2]
     expected_goals = [model(latents[a], latents[b], 0, 0), model(latents[b], latents[a], 0, 0)]
 
-    print(predict_outcome_poisson(*expected_goals))
+    prediction = predict_outcome_poisson(*expected_goals)
+    min_i, max_i = 0, 0
+    for i, p in enumerate(prediction):
+        if p > prediction[max_i]:
+            max_i = i
+        elif p < prediction[min_i]:
+            min_i = i
+    prediction[max_i] *= 1.4
+    prediction[min_i] *= 0.6
+    prediction[1] *= 1.4
+
+    print([p / sum(prediction) for p in prediction])

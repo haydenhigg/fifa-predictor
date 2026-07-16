@@ -17,6 +17,6 @@ for i, row in enumerate(data):
     loss = compute_loss(row[2:5], row[5:])
     losses.append(loss)
 
-print(f'Outcome: {mean(losses):.3f} log loss')
+print(f'Outcome: {mean(losses):.4f} log loss')
 
 # 0.817 log loss is the number to beat!
