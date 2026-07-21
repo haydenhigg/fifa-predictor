@@ -11,8 +11,8 @@ from datetime import datetime
 #         print(series['ticker'] + '\t\t' + series['title'])
 # exit()
 
-# SERIES_TICKER = 'KXATPMATCH'
-SERIES_TICKER = 'KXMLBGAME'
+SERIES_TICKER = 'KXATPMATCH'
+# SERIES_TICKER = 'KXMLBGAME'
 
 # get event moneylines
 def get_events(series_ticker: str, n: int = -1, future_only: bool = False) -> list[dict]:
@@ -124,7 +124,7 @@ for event in events:
             time.sleep(cooldown)
             cooldown *= 2
 
-        moneyline = get_moneyline(event['markets'], n=2, interval_minutes=60)
+        moneyline = get_moneyline(event['markets'], n=6, interval_minutes=60)
 
     for index in [0, -1]:
         for market in event['markets']:
