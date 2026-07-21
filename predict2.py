@@ -11,7 +11,7 @@ from sys import argv
 
 INPUT_PATH = Path('ha_fifa_matches.csv')
 
-TEST_FRACTION = 0.082
+TEST_FRACTION = 0.08
 STR_LATENT_LR = 0.09
 HOME_LATENT_LR = 0.0
 CORR_LATENT_LR = 0.16
@@ -76,6 +76,14 @@ def predict_outcome_poisson(lam0: float, lam1: float) -> list[float]:
 
     return [p / p_sum for p in outcome]
 
+def softmax(zs: list[float], t: float = 1.0) -> list[float]:
+    ezs = [math.exp(z / t) for z in zs]
+    sum_ezs = sum(ezs)
+
+    return [ez / sum_ezs for ez in ezs]
+
+# print('Date\tTeam A\tTeam B\tOff A\tDef A\tCorr A\txG A\tOff B\tDef B\tCorr B\txG B\tP(A)\tP(Tie)\tP(B)\tA\tTie\tB\tResidual')
+
 if __name__ == '__main__':
     matches = read_matches()
     num_matches = len(matches)
@@ -85,6 +93,7 @@ if __name__ == '__main__':
 
     log_loss = 0
     mse = 0
+    accuracy = 0
 
     # xs_train, xs_test = [], []
     # ys_train, ys_test = [], []
@@ -124,6 +133,7 @@ if __name__ == '__main__':
         y = encode_outcome(*match['goals'])
 
         if i >= num_matches - num_test_matches:
+            print(match['date'], match['teams'])
             prediction = predict_outcome_poisson(*expected_goals)
             min_i, max_i = 0, 0
             for i, p in enumerate(prediction):
@@ -131,18 +141,29 @@ if __name__ == '__main__':
                     max_i = i
                 elif p < prediction[min_i]:
                     min_i = i
-            prediction[max_i] *= 1.4
-            prediction[min_i] *= 0.6
-            prediction[1] *= 1.4
 
-            prediction = [p / sum(prediction) for p in prediction]
+            # x = min(expected_goals) / max(expected_goals)
+            # s = 1/(1-math.log(x))
+            # prediction = softmax([math.log(p) for p in prediction], 0.7)
+            prediction[max_i] = 0.98
+            prediction[(max_i + 1) % 3] = 0.01
+            prediction[(max_i + 2) % 3] = 0.01
+
+            if max_i == y.index(max(y)):
+                accuracy += 1
+
+            # prediction[max_i] *= 1.4
+            # prediction[min_i] *= 0.6
+            # prediction = [p / sum(prediction) for p in prediction]
 
             log_loss += compute_loss(prediction, y)
             mse += ((expected_goals[0] - expected_goals[1]) - (match['goals'][0] - match['goals'][1])) ** 2
 
             # calculate residual
-            r = -math.log(prediction[y.index(max(y))])
-            print(model(latents[a], latents[b], match['homes'][j], match['homes'][(j + 1) % 2]), r)
+            a = match['teams'][0]
+            b = match['teams'][1]
+            # r = -math.log(prediction[y.index(max(y))])
+            # print(f'{match["date"]}\t{a}\t{b}\t{latents[a]["offense"]:.4f}\t{latents[a]["defense"]:.4f}\t{latents[a]["correlation"]:.4f}\t{model(latents[a], latents[b], 0, 0):.4f}\t{latents[b]["offense"]:.4f}\t{latents[b]["defense"]:.4f}\t{latents[b]["correlation"]:.4f}\t{model(latents[b], latents[a], 0, 0):.4f}\t{prediction[0]:.4f}\t{prediction[1]:.4f}\t{prediction[2]:.4f}\t{y[0]:.4f}\t{y[1]:.4f}\t{y[2]:.4f}\t{r:.4f}')
 
         #     xs_test.append(x)
         #     ys_test.append(y)
@@ -172,8 +193,10 @@ if __name__ == '__main__':
 
     log_loss /= num_test_matches
     mse /= num_test_matches
+    accuracy /= num_test_matches
 
-    print(f'Outcome: {log_loss:.4f} log loss')
+    print(f'Outcome: {log_loss:.3f} log loss')
+    print(f'Outcome: {100 * accuracy:.1f}% accuracy')
     print(f'Goal difference: {math.sqrt(mse):.3f} RMSE')
 
     # nn = MLPClassifier(hidden_layer_sizes=[80], max_iter=300)

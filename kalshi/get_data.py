@@ -3,15 +3,16 @@ from httpx import get
 from datetime import datetime
 
 # # get series
-# response = get('https://external-api.kalshi.com/trade-api/v2/series?category=Sports&tags=Soccer')
+# response = get('https://external-api.kalshi.com/trade-api/v2/series?category=Sports&tags=Baseball')
 # data = response.json()
 
 # for series in data['series']:
-#     if 'World Cup Game' in series['title']:
-#         print(series['ticker'] + '\t' + series['title'])
+#     if 'Game' in series['title']:
+#         print(series['ticker'] + '\t\t' + series['title'])
 # exit()
 
-SERIES_TICKER = 'KXWCGAME' # World Cup Game
+# SERIES_TICKER = 'KXATPMATCH'
+SERIES_TICKER = 'KXMLBGAME'
 
 # get event moneylines
 def get_events(series_ticker: str, n: int = -1, future_only: bool = False) -> list[dict]:
@@ -39,6 +40,8 @@ def get_events(series_ticker: str, n: int = -1, future_only: bool = False) -> li
 
         if data['cursor'] and data['cursor'] != '':
             params['cursor'] = data['cursor']
+        else:
+            break
 
     return events
 
@@ -89,7 +92,6 @@ def get_moneyline(markets: list, n: int = -1, interval_minutes: int = 1440) -> d
     moneyline = {}
 
     if 'markets' not in data:
-        print(data)
         return moneyline
 
     for market in data['markets']:
@@ -109,7 +111,7 @@ def get_moneyline(markets: list, n: int = -1, interval_minutes: int = 1440) -> d
 
 events = get_events(SERIES_TICKER)
 
-print('event_name        	event_ticker          	P(A)	P(B)	P(Tie)	A	B	Tie')
+print('P(A)	P(B)	A	B')
 
 for event in events:
     cooldown = 0
@@ -122,21 +124,10 @@ for event in events:
             time.sleep(cooldown)
             cooldown *= 2
 
-        moneyline = get_moneyline(event['markets'], n=(24*14), interval_minutes=60)
+        moneyline = get_moneyline(event['markets'], n=2, interval_minutes=60)
 
-    # print(event['sub_title'])
-    # for market_ticker, prices in moneyline.items():
-    #     print(market_ticker, ','.join([str(price['yes_ask']) for price in prices]))
+    for index in [0, -1]:
+        for market in event['markets']:
+            print(moneyline[market['ticker']][index]['yes_ask'], end='\t')
 
-    code = event['event_ticker'][-6:]
-
-    print('\t'.join([
-        event['sub_title'],
-        event['event_ticker'],
-        str(moneyline[event['event_ticker'] + '-' + code[:3]][0]['yes_ask']),
-        str(moneyline[event['event_ticker'] + '-' + code[3:]][0]['yes_ask']),
-        str(moneyline[event['event_ticker'] + '-TIE'][0]['yes_ask']),
-        str(moneyline[event['event_ticker'] + '-' + code[:3]][-1]['yes_ask']),
-        str(moneyline[event['event_ticker'] + '-' + code[3:]][-1]['yes_ask']),
-        str(moneyline[event['event_ticker'] + '-TIE'][-1]['yes_ask'])
-    ]))
+    print()

@@ -9,11 +9,12 @@ def compute_loss(ps: list[float], target: list[float]) -> float:
 
     return loss
 
-with open('data_slv_7d.tsv') as f:
+with open('data.tsv') as f:
     data = [row.split('\t') for row in f.read().strip().split('\n')[1:]]
 
 losses = []
-for i, row in enumerate(data):
+for i, row in enumerate(data[:30]):
+    print(row[0])
     loss = compute_loss(row[2:5], row[5:])
     losses.append(loss)
 
