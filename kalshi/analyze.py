@@ -22,6 +22,8 @@ with open(FILE) as f:
     data = [[float(x) for x in row.strip().split('\t')] for row in f.read().strip().split('\n')[1:]]
     outcomes = int(len(data[0]) / 2)
 
+FEE = 0.0175
+
 bins = get_bins([p for row in data for p in row[:2]], BINS)
 
 ps = {}
@@ -33,7 +35,7 @@ for row in data:
         outcome = row[i + outcomes]
 
         bin = bin_for_p(bins, p)
-        factor = 1 / p if outcome == 1 else 0
+        factor = (1 - FEE) / p if outcome == 1 else 0
 
         if bin in ps:
             ps[bin].append(p)
