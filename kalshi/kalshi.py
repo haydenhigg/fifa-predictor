@@ -136,14 +136,19 @@ def get_historical_events(series_ticker: str, n: int = -1, outcomes: int = 2) ->
 
     return events
 
-def get_historical_moneyline(markets: list, start_ts: int, end_ts: int, interval_minutes: int = 1440) -> dict:
+def get_historical_moneyline(markets: list, n: int = -1, interval_minutes: int = 1440) -> dict:
     moneyline = {}
 
     for market in markets:
+        event_time_iso_timestamp = market['occurrence_datetime']
+        event_time = int(datetime.fromisoformat(event_time_iso_timestamp).timestamp())
+
+        start_ts = event_time - 60 * interval_minutes * int(min(max(n, 1), 20_160 / interval_minutes, 5000))
+
         # fetch candlesticks
         response = get(HISTORICAL_CANDLESTICKS_URL_FMT.format(market['ticker']), params={
             'start_ts': start_ts,
-            'end_ts': end_ts,
+            'end_ts': event_time - 60 * interval_minutes,
             'period_interval': interval_minutes
         })
         data = response.json()
@@ -154,9 +159,14 @@ def get_historical_moneyline(markets: list, start_ts: int, end_ts: int, interval
         for candlestick in data.get('candlesticks', []):
             prices.append({
                 'end_period_ts': int(candlestick['end_period_ts']),
-                'yes_ask': float(candlestick['yes_ask']['close_dollars'])
+                'yes_ask': float(candlestick['yes_ask']['close'])
             })
 
-        moneyline[ticker] = prices
+        prices.append({
+            'end_period_ts': event_time,
+            'yes_ask': float(market.get('settlement_value_dollars', market['yes_ask_dollars']))
+        })
+
+        moneyline[market['ticker']] = prices
 
     return moneyline

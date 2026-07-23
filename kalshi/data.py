@@ -37,31 +37,26 @@ if len(argv) == 1:
     exit(1)
 
 league = LEAGUES[argv[1]]
-events = get_historical_events(league['series_ticker'], n=1, outcomes=league['outcomes'])
+events = get_historical_events(league['series_ticker'], n=1000, outcomes=league['outcomes'])
 
 print('P(A)	P(B)	A	B')
 
 for event in events:
-    print(event)
-    exit()
-    try:
-        cooldown = 0
-        moneyline = None
+    cooldown = 0
+    moneyline = None
 
-        while not moneyline:
-            if cooldown == 0:
-                cooldown = 1
-            else:
-                time.sleep(cooldown)
-                cooldown *= 2
+    while not moneyline:
+        if cooldown == 0:
+            cooldown = 1
+        else:
+            time.sleep(cooldown)
+            cooldown *= 2
 
-            moneyline = get_moneyline(event['markets'], n=6, interval_minutes=60)
+        moneyline = get_historical_moneyline(event['markets'], n=6, interval_minutes=60)
 
-        if any(prices[-1]['yes_ask'] == 1 for prices in moneyline.values()):
-            for index in [0, -1]:
-                for market in event['markets']:
-                    print(moneyline[market['ticker']][index]['yes_ask'], end='\t')
+    if any(prices[-1]['yes_ask'] == 1 for prices in moneyline.values()) and not any(prices[0]['yes_ask'] == 1 or prices[0]['yes_ask'] == 0 for prices in moneyline.values()):
+        for index in [0, -1]:
+            for market in event['markets']:
+                print(moneyline[market['ticker']][index]['yes_ask'], end='\t')
 
-            print()
-    except:
-        pass
+        print()
