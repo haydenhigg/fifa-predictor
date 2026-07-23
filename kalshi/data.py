@@ -3,16 +3,19 @@ from httpx import get
 from datetime import datetime
 
 # # get series
-# response = get('https://external-api.kalshi.com/trade-api/v2/series?category=Sports&tags=Baseball')
+# response = get('https://external-api.kalshi.com/trade-api/v2/series?category=Sports&tags=Boxing')
 # data = response.json()
 
 # for series in data['series']:
-#     if 'Game' in series['title']:
-#         print(series['ticker'] + '\t\t' + series['title'])
+#     # if 'Major League Soccer' in series['title']:
+#     print(series['ticker'] + '\t\t' + series['title'])
 # exit()
 
-SERIES_TICKER = 'KXATPMATCH'
+# SERIES_TICKER = 'KXATPMATCH'
+# SERIES_TICKER = 'KXATPCHALLENGERMATCH'
 # SERIES_TICKER = 'KXMLBGAME'
+# SERIES_TICKER = 'KXMLSGAME'
+# SERIES_TICKER = 'KXBOXING'
 
 # get event moneylines
 def get_events(series_ticker: str, n: int = -1, future_only: bool = False) -> list[dict]:
@@ -114,20 +117,24 @@ events = get_events(SERIES_TICKER)
 print('P(A)	P(B)	A	B')
 
 for event in events:
-    cooldown = 0
-    moneyline = None
+    try:
+        cooldown = 0
+        moneyline = None
 
-    while not moneyline:
-        if cooldown == 0:
-            cooldown = 1
-        else:
-            time.sleep(cooldown)
-            cooldown *= 2
+        while not moneyline:
+            if cooldown == 0:
+                cooldown = 1
+            else:
+                time.sleep(cooldown)
+                cooldown *= 2
 
-        moneyline = get_moneyline(event['markets'], n=6, interval_minutes=60)
+            moneyline = get_moneyline(event['markets'], n=6, interval_minutes=60)
 
-    for index in [0, -1]:
-        for market in event['markets']:
-            print(moneyline[market['ticker']][index]['yes_ask'], end='\t')
+        if any(prices[-1]['yes_ask'] == 1 for prices in moneyline.values()):
+            for index in [0, -1]:
+                for market in event['markets']:
+                    print(moneyline[market['ticker']][index]['yes_ask'], end='\t')
 
-    print()
+            print()
+    except:
+        pass
