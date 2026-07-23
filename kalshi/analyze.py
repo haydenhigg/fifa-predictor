@@ -6,13 +6,14 @@ if len(argv) == 1:
     exit(1)
 
 FILE = argv[1]
-BINS = int(argv[2] if len(argv) >= 3 else 10)
+BINS = int(argv[2] if len(argv) >= 3 else 2)
 
 def get_bins(ps: list[float], n: int) -> list[float]:
     return [0] + quantiles(ps, n=n, method='inclusive') + [1]
 
 def bin_for_p(bins: list[float], p: float) -> int:
     i = 0
+
     while i < len(bins) and p > bins[i]:
         i += 1
 
@@ -52,7 +53,7 @@ for i in sorted(factors.keys()):
     win_count = len([factor for factor in factors[i] if factor > 0])
 
     print(FMT.format(
-        bins[i] + 0.01,
+        bins[i],
         bins[i + 1],
         count,
         mean(ps[i]),
