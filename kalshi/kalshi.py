@@ -83,6 +83,7 @@ def get_moneyline(markets: list, n: int = -1, interval_minutes: int = 1440) -> d
     moneyline = {}
 
     if 'markets' not in data:
+        print(data)
         return moneyline
 
     for market in data['markets']:
@@ -139,16 +140,31 @@ def get_historical_events(series_ticker: str, n: int = -1, outcomes: int = 2) ->
 def get_historical_moneyline(markets: list, n: int = -1, interval_minutes: int = 1440) -> dict:
     moneyline = {}
 
+    now = int(time.time())
+    then = now
+
     for market in markets:
+        if 'occurrence_datetime' not in market:
+            continue
+
         event_time_iso_timestamp = market['occurrence_datetime']
         event_time = int(datetime.fromisoformat(event_time_iso_timestamp).timestamp())
 
-        start_ts = event_time - 60 * interval_minutes * int(min(max(n, 1), 20_160 / interval_minutes, 5000))
+        if event_time < then:
+            then = event_time
+
+    if then == now:
+        return {}
+
+    interval_seconds = 60 * interval_minutes
+
+    for market in markets:
+        start_ts = then - interval_seconds * int(min(max(n, 2), 20_160 / interval_minutes, 5000))
 
         # fetch candlesticks
         response = get(HISTORICAL_CANDLESTICKS_URL_FMT.format(market['ticker']), params={
             'start_ts': start_ts,
-            'end_ts': event_time - 60 * interval_minutes,
+            'end_ts': event_time - interval_seconds * 2,
             'period_interval': interval_minutes
         })
         data = response.json()
@@ -163,10 +179,38 @@ def get_historical_moneyline(markets: list, n: int = -1, interval_minutes: int =
             })
 
         prices.append({
-            'end_period_ts': event_time,
+            'end_period_ts': now,
             'yes_ask': float(market.get('settlement_value_dollars', market['yes_ask_dollars']))
         })
 
         moneyline[market['ticker']] = prices
+
+    # synthesize missing prices if possible
+    moneyline_prices = list(moneyline.values())
+    moneyline_prices_lens = [len(prices) for prices in moneyline_prices]
+
+    if len(set(moneyline_prices_lens)) > 1:
+        max_prices_len = max(moneyline_prices_lens)
+
+        for market, prices in moneyline.items():
+            if len(prices) >= max_prices_len:
+                continue
+
+            for i in reversed(range(max_prices_len)):
+                if len(prices) + i >= max_prices_len:
+                    continue
+
+                known_price_sum = 0
+
+                for known_market, known_prices in moneyline.items():
+                    if known_market != market:
+                        known_price_sum += known_prices[i]['yes_ask']
+
+                moneyline[market].append({
+                    'end_period_ts': None,
+                    'yes_ask': 1.02 - known_price_sum
+                })
+
+            moneyline[market].reverse()
 
     return moneyline
